@@ -1,13 +1,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "lcrq.h"
+#include "lprq.h"
 #include "align.h"
 #include "delay.h"
 #include "hzdptr.h"
 #include "primitives.h"
 
-#define RING_SIZE LCRQ_RING_SIZE
+#define RING_SIZE LPRQ_RING_SIZE
 
 static inline int is_empty(uint64_t v) __attribute__ ((pure));
 static inline uint64_t node_index(uint64_t i) __attribute__ ((pure));
@@ -93,7 +93,7 @@ static inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
     return BTAS(&rq->tail, 63);
 }
 
-static void lcrq_put(queue_t * q, handle_t * handle, uint64_t arg) {
+static void lprq_put(queue_t * q, handle_t * handle, uint64_t arg) {
   int try_close = 0;
 
   while (1) {
@@ -138,7 +138,7 @@ alloc:
     if (is_empty(val)) {
       if (node_index(idx) <= t) {
         if ((!node_unsafe(idx) || rq->head < t) &&
-            CAS2(cell, &val, &idx, arg, t)) {
+            CAS2(cell, &val, &idx, arg, t + RING_SIZE)) {
           return;
         }
       }
@@ -155,12 +155,13 @@ alloc:
   hzdptr_clear(&handle->hzdptr, 0);
 }
 
-static uint64_t lcrq_get(queue_t * q, handle_t * handle) {
+static uint64_t lprq_get(queue_t * q, handle_t * handle) {
   while (1) {
     RingQueue *rq = hzdptr_setv(&q->head, &handle->hzdptr, 0);
     RingQueue *next;
 
     uint64_t h = FAA(&rq->head, 1);
+    uint64_t effective_h = h + RING_SIZE;
 
     RingNode* cell = &rq->array[h & (RING_SIZE-1)];
 
@@ -168,20 +169,19 @@ static uint64_t lcrq_get(queue_t * q, handle_t * handle) {
     int r = 0;
 
     while (1) {
-
       uint64_t cell_idx = cell->idx;
       uint64_t unsafe = node_unsafe(cell_idx);
       uint64_t idx = node_index(cell_idx);
       uint64_t val = cell->val;
 
-      if (idx > h) break;
+      if (idx > effective_h) break;
 
       if (!is_empty(val)) {
-        if (idx == h) {
-          if (CAS2(cell, &val, &cell_idx, -1, (unsafe | h) + RING_SIZE))
+        if (idx == effective_h) {
+            SWAP(&cell->val, -1);
             return val;
         } else {
-          if (CAS2(cell, &val, &cell_idx, val, set_unsafe(idx))) {
+          if (CAS(&cell->idx, &idx, set_unsafe(idx))) {
             break;
           }
         }
@@ -194,10 +194,10 @@ static uint64_t lcrq_get(queue_t * q, handle_t * handle) {
         uint64_t t = tail_index(tt);
 
         if (unsafe) { // Nothing to do, move along
-          if (CAS2(cell, &val, &cell_idx, val, (unsafe | h) + RING_SIZE))
+          if (CAS(&cell->idx, &cell_idx, unsafe | effective_h))
             break;
         } else if (t < h + 1 || r > 200000 || crq_closed) {
-          if (CAS2(cell, &val, &idx, val, h + RING_SIZE)) {
+          if (CAS(&cell->idx, &idx, effective_h)) {
             if (r > 200000 && tt > RING_SIZE)
               BTAS(&rq->tail, 63);
             break;
@@ -232,12 +232,12 @@ void queue_register(queue_t * q, handle_t * th, int id)
 
 void enqueue(queue_t * q, handle_t * th, void * val)
 {
-  lcrq_put(q, th, (uint64_t) val);
+  lprq_put(q, th, (uint64_t) val);
 }
 
 void * dequeue(queue_t * q, handle_t * th)
 {
-  return (void *) lcrq_get(q, th);
+  return (void *) lprq_get(q, th);
 }
 //By K
 void handle_free(handle_t *h){
