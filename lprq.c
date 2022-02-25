@@ -197,7 +197,7 @@ static uint64_t lprq_get(queue_t * q, handle_t * handle) {
           if (CAS(&cell->idx, &cell_idx, unsafe | effective_h))
             break;
         } else if (t < h + 1 || r > 200000 || crq_closed) {
-          if (CAS(&cell->idx, &idx, effective_h)) {
+          if (CAS(&cell->idx, &cell_idx, effective_h)) {
             if (r > 200000 && tt > RING_SIZE)
               BTAS(&rq->tail, 63);
             break;

@@ -46,6 +46,8 @@ void * benchmark(int id, int nprocs) {
 
   int i;
   for (i = 0; i < nops / nprocs; ++i) {
+    val = (void*) (((uintptr_t) val) & ((1ull << 60) - 1));
+
     enqueue(q, th, val);
     delay_exec(&state);
 

@@ -1,6 +1,6 @@
-TESTS = wfqueue wfqueue0 lcrq lprq ccqueue msqueue faa delay
+TESTS = wfqueue wfqueue0 lcrq lprq lprq2 ccqueue msqueue faa delay
 
-CC = gcc
+CC = gcc-11
 CFLAGS = -g -Wall -O3 -pthread -D_GNU_SOURCE
 LDLIBS = -lpthread -lm
 
@@ -37,6 +37,7 @@ biou: CFLAGS += -DBIOU_COMPACT
 wfqueue wfqueue0: CFLAGS += -DWFQUEUE
 lcrq: CFLAGS += -DLCRQ
 lprq: CFLAGS += -DLPRQ
+lprq2: CFLAGS += -DLPRQ2
 ccqueue: CFLAGS += -DCCQUEUE
 msqueue: CFLAGS += -DMSQUEUE
 faa: CFLAGS += -DFAAQ
@@ -49,7 +50,7 @@ else
 $(TESTS): pairwise.o
 endif
 
-msqueue lcrq lprq: hzdptr.o xxhash.o
+msqueue lcrq lprq lprq2: hzdptr.o xxhash.o
 
 clean:
 	rm -f $(TESTS) *.o
